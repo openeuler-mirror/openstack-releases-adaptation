@@ -4,6 +4,8 @@ repo.py - src-openeuler 仓库列表采集
 通过 Atomgit API 获取 src-openeuler 组织下的所有仓库。
 """
 
+from pathlib import Path
+
 import json
 from typing import Any
 
