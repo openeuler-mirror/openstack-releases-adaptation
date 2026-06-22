@@ -11,25 +11,26 @@ openstack:
   current: "bobcat"
   base_url: "https://releases.openstack.org/"
   releases:
-    - queens
-    - rocky
-    - train
-    - stein
-    - ussuri
-    - victoria
-    - wallaby
-    - xena
-    - yoga
-    - zed
-    - "2023.1 antelope"
-    - "2023.2 bobcat"
-    - "2024.1 caracal"
-    - "2024.2 dalmatian"
+    # - queens
+    # - rocky
+    # - train
+    # - stein
+    # - ussuri
+    # - victoria
+    # - wallaby
+    # - xena
+    # - yoga
+    # - zed
+    # - "2023.1 antelope"
+    # - "2023.2 bobcat"
+    # - "2024.1 caracal"
+    # - "2024.2 dalmatian"
     - "2025.1 epoxy"
     - "2025.2 flamingo"
     - "2026.1 gazpacho"
-    - "2026.2 hibiscus"
-  output: "openstack_release.yaml"
+    # - "2026.2 hibiscus"
+  output_release: "openstack_release.yaml"
+  output_requirements: "openstack_requirements.yaml"
 
 fetcher:
   timeout: 10000
