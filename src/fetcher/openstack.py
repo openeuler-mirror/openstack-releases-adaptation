@@ -5,8 +5,6 @@ openstack.py - OpenStack releases 版本信息采集
 """
 
 import re
-import sys
-from pathlib import Path
 from typing import Any
 
 import requests
@@ -72,7 +70,7 @@ def run(config: dict[str, Any] | None = None, config_path: str | None = None) ->
     base_url = config['openstack']['base_url']
     timeout = config['fetcher']['timeout']
     verify_ssl = config['fetcher']['verify_ssl']
-    output_filename = config['openstack']['output']
+    output_filename = config['openstack']['output_release']
 
     all_results = {}
     for release in releases:

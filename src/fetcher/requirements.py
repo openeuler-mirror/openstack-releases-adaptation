@@ -1,15 +1,14 @@
 """
-constraints.py - OpenStack upper-constraints 采集
+requirements.py - OpenStack upper-requirements 采集
 
-从 opendev.org 下载各版本的 upper-constraints.txt 并解析。
+从 opendev.org 下载各版本的 upper-requirements.txt 并解析。
 """
 
-from pathlib import Path
 from typing import Any
 
 import requests
 
-from config import load_config, get_data_path
+from config import load_config, get_output_path
 
 
 def parse_constraints(text: str) -> dict[str, str]:
@@ -26,24 +25,24 @@ def parse_constraints(text: str) -> dict[str, str]:
     return result
 
 
-def fetch_constraints(release_name: str, timeout: int = 30) -> dict[str, str]:
+def fetch_constraints(release_version: str, timeout: int = 30) -> dict[str, str]:
     """
     从 opendev.org 下载指定版本的 upper-constraints.txt。
 
     Args:
-        release_name: 如 'bobcat', 'antelope'
+        release_version: 如 'stable/2025.1', 'stable/2025.2' 等
         timeout: 请求超时（秒）
 
     Returns:
         {package: version} 字典
     """
-    url = f"https://opendev.org/openstack/requirements/raw/branch/stable/{release_name}/upper-constraints.txt"
+    url = f"https://opendev.org/openstack/requirements/raw/branch/stable/{release_version}/upper-constraints.txt"
     try:
         resp = requests.get(url, timeout=timeout)
         resp.raise_for_status()
         return parse_constraints(resp.text)
     except requests.RequestException as e:
-        print(f"Error fetching constraints for {release_name}: {e}")
+        print(f"Error fetching constraints for {release_version}: {e}")
         return {}
 
 
@@ -53,18 +52,20 @@ def run(config: dict[str, Any] | None = None) -> int:
         config = load_config()
 
     releases = config['openstack']['releases']
+    output_filename = config['openstack']['output_requirements']
     timeout = config['fetcher']['timeout'] // 1000
 
     all_constraints = {}
     for release in releases:
-        name = release.split()[-1]
-        print(f"Fetching constraints for {name}...")
-        all_constraints[name] = fetch_constraints(name, timeout)
+        release_name = release.split()[-1]
+        release_version = release.split()[0]
+        print(f"Fetching constraints for {release_version}...")
+        all_constraints[release_version] = fetch_constraints(release_version, timeout)
 
-    output_path = get_data_path("constraints.json")
+    output_path = get_output_path(output_filename)
     import json
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(all_constraints, f, indent=2, ensure_ascii=False)
 
-    print(f"\nConstraints saved to: {output_path}")
+    print(f"\nRequirements saved to: {output_path}")
     return 0

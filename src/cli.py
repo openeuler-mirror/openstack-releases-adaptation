@@ -29,7 +29,6 @@ import inventory
 import diff
 import spec
 import builder
-import state
 import web
 
 
@@ -38,8 +37,8 @@ def cmd_fetch(args):
     cfg = config.load_config(args.config)
     print("=== Fetch: OpenStack releases ===")
     fetcher.fetch_releases(cfg)
-    print("\n=== Fetch: Upper-constraints ===")
-    fetcher.fetch_constraints(cfg)
+    print("\n=== Fetch: Upper-requirements ===")
+    fetcher.fetch_requirements(cfg)
     return 0
 
 
