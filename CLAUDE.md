@@ -1,0 +1,429 @@
+# OpenStack × openEuler 自动化适配方案
+
+## 一、背景 / Background
+
+**中文：**
+
+随着 OpenStack 上游版本迭代频繁，openEuler 当前依赖人工完成各版本软件包适配、依赖升级与构建验证，存在效率低、周期长、易遗漏等问题。基于 24.03-LTS 的适配经验，主要工作集中在：
+
+- Python 版本演进
+- 核心依赖版本升降级
+- 软件包 spec 调整
+
+**English:**
+
+With rapid upstream OpenStack releases, openEuler currently relies on manual efforts to adapt packages, upgrade dependencies, and verify builds. This process is inefficient and error-prone. Based on the experience from 24.03-LTS, adaptation mainly involves:
+
+- Python version evolution
+- Dependency version adjustments
+- RPM spec modifications
+
+---
+
+## 二、目标 / Objectives
+
+**中文：**
+
+- 实现 OpenStack 上游版本 → openEuler 发行版的**自动化适配闭环**
+- 降低人工介入比例
+- 提高版本交付速度和质量
+- 构建可复用的自动化工具链
+
+**English:**
+
+- Build an **automated adaptation pipeline** from OpenStack upstream to openEuler
+- Minimize manual intervention
+- Improve release velocity and quality
+- Provide reusable automation infrastructure
+
+---
+
+## 三、总体架构 / Overall Architecture
+
+```text
+OpenStack Releases (openstack/releases)
+        ↓
+Package & Dependency Analysis (fetcher + inventory)
+        ↓
+Diff & Decision (version / constraint comparison)
+        ↓
+Auto-spec Update (spec/)
+        ↓
+Docker Build Test (builder/docker.py)
+        ↓
+EUR Build (builder/eur.py) — per OpenStack Release
+        ↓
+CI Feedback & Web Status (state/ + web/)
+```
+
+**关键设计选择 / Key Design Choice：**
+
+| 方案          | 结论            |
+| ----------- | ------------- |
+| EBS         | ❌ 放弃（私有仓，不透明） |
+| EUR         | ✅ 主构建平台       |
+| Atomgit API | ✅ 唯一合入入口      |
+
+---
+
+## 四、核心功能模块 / Core Modules
+
+### 4.1 模块总览
+
+| 模块 / Module | 说明 / Description |
+|-------------|-------------------|
+| `fetcher/` | 获取 OpenStack releases 及 upper-constraints |
+| `inventory/` | 扫描 src-openeuler 仓库版本信息 |
+| `diff/` | 比较版本与依赖约束，输出决策 |
+| `spec/` | 自动修改 spec 文件 |
+| `builder/` | Docker + EUR 构建验证 |
+| `state/` | 跨环境状态同步 |
+| `web/` | 适配状态可视化 |
+| `cli.py` | 统一命令行入口 |
+| `config.yaml` | 全局配置中心 |
+
+### 4.2 模块关系
+
+```text
+cli.py
+  ↓
+fetcher → inventory → diff
+                     ↓
+                   spec
+                     ↓
+                builder/
+                     ↓
+                  state
+                     ↓
+                   web
+```
+
+---
+
+## 五、EUR Project / Package 生命周期设计  
+## EUR Project & Package Lifecycle Design
+
+### 5.1 设计原则
+
+| 原则    | 说明                                    |
+| ----- | ------------------------------------- |
+| 版本强绑定 | 一个 OpenStack Release = 一个 EUR Project |
+| 环境隔离  | 不同 openEuler LTS 使用不同目录 / 分支          |
+| 可回滚   | 构建失败不影响正式仓                            |
+| 可复用   | 同一套逻辑适用于未来 OpenStack 版本               |
+
+### 5.2 EUR Project 生命周期
+
+```text
+Create Project
+     ↓
+Enable Repository
+     ↓
+Add Packages (per OpenStack release)
+     ↓
+Build & Test
+     ↓
+Promote to src-openeuler
+     ↓
+Archive / Disable Builds
+```
+
+### 5.3 Project 命名规范
+
+| 类型 | 命名 |
+|----|----|
+| 正式开发 | `openstack:<release>` |
+| 实验性 | `openstack:test-<feature>` |
+| 历史归档 | `openstack:archive-<release>` |
+
+示例：
+
+```
+openstack:bobcat
+openstack:antelope
+```
+
+### 5.4 Package 生命周期
+
+```text
+Detect Version Gap
+      ↓
+Prepare Spec
+      ↓
+Submit to EUR
+      ↓
+Build Success? ──→ No ──→ Mark needs-human
+      ↓ Yes
+Record Build Log
+      ↓
+Link to EUR Repo
+      ↓
+Ready for PR
+```
+
+### 5.5 EUR 目录与分支设计
+
+**目录结构 / Repository Layout：**
+
+```
+openstack-bobcat/
+├── nova/
+│   └── openEuler-24.03-LTS/
+│       ├── nova.spec
+│       ├── patches/
+│       └── SOURCES/
+├── neutron/
+│   └── openEuler-24.03-LTS/
+```
+
+**分支策略 / Branch Strategy：**
+
+| 分支 | 用途 |
+|----|----|
+| `main` | 元数据 & 状态 |
+| `oe-24.03-lts` | 对应 openEuler 版本 |
+| `pr/<pkg>` | Bot 临时 PR 分支 |
+
+### 5.6 EUR 构建结果管理
+
+| 状态 | 含义 |
+|----|----|
+| `pending` | 等待构建 |
+| `building` | 构建中 |
+| `success` | 可进入 PR |
+| `failed` | 需人工介入 |
+| `promoted` | 已合入 src-openeuler |
+
+---
+
+## 六、Gitee PR 自动提交策略（Bot 账号）  
+## Gitee Pull Request Automation Strategy
+
+### 6.1 Bot 账号定位
+
+**Bot 权限模型（最小权限）：**
+
+| 权限 | 是否开启 |
+|----|----|
+| 读取仓库 | ✅ |
+| Fork 仓库 | ✅ |
+| 提交 PR | ✅ |
+| 合并 PR | ❌ |
+| 直接 Push | ❌ |
+
+- Bot **不拥有 committer 权限**
+- 所有 PR 由 SIG maintainer 审核后合入
+
+### 6.2 PR 生命周期
+
+```text
+Clone src-openeuler/<pkg>
+         ↓
+Create branch pr/openstack-<release>-<pkg>
+         ↓
+Update spec & sources
+         ↓
+Commit & Push
+         ↓
+Create PR
+         ↓
+Wait CI
+         ↓
+Passed? ──→ Yes ──→ Maintainer Merge
+              ↓ No
+           Bot Comment
+```
+
+### 6.3 PR 提交策略
+
+**PR 标题规范：**
+
+```
+[openstack][bobcat] Upgrade <pkg> to <version>
+```
+
+**PR 描述模板：**
+
+```markdown
+### 变更说明 / Changes
+- Upgrade <pkg> from <old> to <new>
+- Required for OpenStack Bobcat on openEuler 24.03-LTS
+
+### 构建验证 / Build Verification
+- [x] Docker build passed
+- [x] EUR build succeeded
+- [ ] Manual test required
+
+### 关联 Issue / Related Issue
+Fixes #
+
+### 注意事项 / Notes
+This PR is auto-generated by OpenStack adaptation bot.
+```
+
+### 6.4 CI 联动策略
+
+| CI 状态 | Bot 行为 |
+|------|---------|
+| CI 成功 | 标记 `ready-to-merge` |
+| CI 失败 | 评论失败原因，关闭 PR |
+| CI 超时 | 重新触发构建 |
+
+### 6.5 防抖与限流
+
+| 控制项 | 策略 |
+|----|----|
+| 同包 PR | 同一版本只开一个 PR |
+| PR 频率 | 每仓库 ≤ N PR / 天 |
+| 冲突检测 | 自动 rebase / 放弃 |
+
+### 6.6 异常处理
+
+| 场景 | 处理方式 |
+|----|----|
+| spec 冲突 | 标记 needs-human |
+| 构建失败 | 关闭 PR，记录日志 |
+| 多次 CI 失败 | 暂停该包自动化 |
+
+---
+
+## 七、项目目录结构 / Project Layout
+
+```
+openstack-oE-adapter/
+├── fetcher/          # 上游数据采集
+├── inventory/        # openEuler 现状采集
+├── diff/             # 差异分析与决策引擎
+├── spec/             # Spec 自动修改
+├── builder/
+│   ├── docker.py     # Docker 本地构建
+│   └── eur.py        # EUR 构建交互
+├── state/            # 状态管理（跨环境同步）
+├── web/              # 状态展示层
+├── cli.py            # 统一命令行入口
+└── config.yaml       # 全局配置中心
+```
+
+### 各模块详细说明
+
+#### `fetcher/`
+- **输入**：`openstack/releases`、requirements 文件
+- **输出**：标准化 JSON（组件版本 + 依赖约束）
+- **负责**：上游数据解析、版本标准化
+- **不负责**：openEuler 侧判断
+
+#### `inventory/`
+- **输入**：`src-openeuler/*` 仓库
+- **输出**：软件包版本清单（含 spec 元数据）
+- **负责**：构建 openEuler 软件包视图
+- **不负责**：决策是否升级
+
+#### `diff/`
+- **输入**：fetcher 输出 + inventory 输出
+- **输出**：升级决策清单（含 needs-human 标记）
+- **负责**：版本比较、依赖区间匹配、冲突检测
+- **不负责**：实际修改 spec
+
+#### `spec/`
+- **输入**：原 spec + diff 分析结果
+- **输出**：修改后的 spec 文件
+- **负责**：Bump Version、更新依赖、追加 changelog
+- **原则**：最小修改原则
+
+#### `builder/docker.py`
+- **用途**：本地 Docker 环境中构建 RPM，快速失败反馈
+- **价值**：早期拦截明显错误，减少 EUR 资源浪费
+
+#### `builder/eur.py`
+- **用途**：与 EUR（Copr）交互
+- **能力**：创建 project、添加 package、触发构建、查询状态
+- **不负责**：PR 提交
+
+#### `state/`
+- **用途**：保存"做到哪一步了"
+- **存储**：YAML / JSON（可 Git 追踪）
+- **负责**：幂等性保障、防止重复构建 / PR
+
+#### `web/`
+- **用途**：将内部状态暴露为可读视图
+- **实现**：静态 HTML + JSON
+- **不负责**：修改任何数据
+
+---
+
+## 八、开发阶段规划 / Roadmap
+
+| 阶段 / Phase | 内容 | 优先级 |
+|------------|------|-------|
+| **MVP** | 单 OpenStack 版本 + 核心组件 + EUR 构建 | P0 |
+| **Phase 2** | 多版本并行 + Gitee Bot PR 自动提交 | P1 |
+| **Phase 3** | Web 展示 + CI 联动 + state 完善 | P2 |
+| **Long-term** | 支持多 SIG 复用框架 | P3 |
+
+---
+
+## 九、人工介入策略 / Human Intervention Policy
+
+| 场景 / Scenario | 处理方式 |
+|----------------|---------|
+| 构建失败 / Build failure | 人工排查 |
+| 复杂依赖冲突 / Complex dependency | 标记 needs-human |
+| 安全相关升级 / Security update | SIG 审核 |
+| spec 冲突 / Spec conflict | 人工解决 |
+
+---
+
+## 十、预期收益 / Expected Benefits
+
+**中文：**
+- OpenStack 新版本适配周期缩短 50%+
+- 减少重复人力投入
+- 提升 openEuler 云原生生态竞争力
+
+**English:**
+- Reduce OpenStack adaptation cycle by 50%+
+- Eliminate repetitive manual work
+- Strengthen openEuler cloud-native ecosystem
+
+---
+
+## 十一、SIG 评审关注点 / SIG Review Focus
+
+- ✅ 是否影响现有软件包稳定性
+- ✅ 是否依赖私有系统
+- ✅ 是否有回滚机制
+- ✅ 是否符合 openEuler 自动化规范
+- ✅ 是否绕过 Maintainer 审核
+- ✅ 是否可审计
+
+---
+
+## 十二、后续计划 / Next Steps
+
+1. 提交本方案至 SIG-Cloud / SIG-OpenStack 评审
+2. 启动 MVP 开发与试点版本
+3. 定期同步进展与 EUR 构建数据
+
+---
+
+## 附录：配置示例 / Appendix: Configuration Example
+
+### `config.yaml`
+
+```yaml
+openeuler:
+  lts: 24.03
+  branch: openEuler-24.03-LTS-SP4
+
+openstack:
+  releases_repo: openstack/releases
+  current: bobcat
+
+eur:
+  owner: openstack
+  prefix: openstack:
+
+gitee:
+  bot: openstack-bot
+  token_env: GITEE_TOKEN
+```
