@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 import requests
-import yaml
+import json
 
 from config import load_config, get_data_path
 
@@ -39,13 +39,16 @@ def fetch_release_packages(release: str, base_url: str, timeout: int,
         pkg_name = pkg_full_name[0:pkg_full_name.rfind('-')]
         pkg_ver = pkg_full_name[pkg_full_name.rfind('-') + 1:pkg_full_name.rfind('.tar')]
 
+        pkg = {}
         if pkg_name not in results:
-            results[pkg_name] = pkg_ver
+            pkg['version'] = pkg_ver
+            pkg['link'] = pkg_link
+            results[pkg_name] = pkg
         else:
             try:
                 from packaging import version
                 if version.parse(results[pkg_name]) < version.parse(pkg_ver):
-                    results[pkg_name] = pkg_ver
+                    results['version'] = pkg_ver
             except Exception:
                 pass
 
@@ -73,14 +76,13 @@ def run(config: dict[str, Any] | None = None, config_path: str | None = None) ->
     output_filename = config['openstack']['output_release']
 
     for release in releases:
-        all_results = {}
         print(f"Fetching {release}...")
+        release_version = release.split()[0]
         results = fetch_release_packages(release, base_url, timeout, verify_ssl)
-        all_results[release.split()[0]] = results
         print(release.split()[0])
-        output_path = get_data_path(release.split()[0],output_filename)
-        with open(output_path, 'w', encoding='utf-8') as fp:
-            yaml.dump(all_results, fp)
+        output_path = get_data_path(release_version,output_filename)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(results, f,indent=4)
 
         print(f"\nResults saved to: {output_path}")
     return 0
