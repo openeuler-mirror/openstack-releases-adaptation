@@ -7,22 +7,9 @@ requirements.py - OpenStack upper-requirements 采集
 from typing import Any
 
 import requests
+import yaml
 
 from config import load_config, get_output_path
-
-
-def parse_constraints(text: str) -> dict[str, str]:
-    """解析 upper-constraints.txt 内容为 {package: version} 字典。"""
-    result = {}
-    for line in text.strip().splitlines():
-        line = line.strip()
-        if not line or line.startswith('#') or line.startswith('-'):
-            continue
-        if '===' not in line:
-            continue
-        pkg, _, ver = line.partition('===')
-        result[pkg.strip().lower().replace('-', '_')] = ver.strip()
-    return result
 
 
 def fetch_constraints(release_version: str, timeout: int = 30) -> dict[str, str]:
@@ -36,11 +23,26 @@ def fetch_constraints(release_version: str, timeout: int = 30) -> dict[str, str]
     Returns:
         {package: version} 字典
     """
-    url = f"https://opendev.org/openstack/requirements/raw/branch/stable/{release_version}/upper-constraints.txt"
     try:
-        resp = requests.get(url, timeout=timeout)
-        resp.raise_for_status()
-        return parse_constraints(resp.text)
+        url = f"https://opendev.org/openstack/requirements/raw/branch/stable/{release_version}/upper-constraints.txt"
+        upper_projects = requests.get(url, verify=True).content.decode().split('\n')
+        requrements = {}
+        for upper_project in upper_projects:
+            if not upper_project or "===" not in upper_project:
+                continue
+            
+            project_name, project_version = upper_project.split('===')
+            project_version = project_version.split(';')[0]
+            if project_name not in requrements:
+                requrements[project_name.strip()] = project_version.strip()
+            else:
+                try:
+                    from packaging import version
+                    if version.parse(requrements[project_name.strip()]) < version.parse(project_version.strip()):
+                        requrements[project_name.strip()] = project_version.strip()
+                except Exception:
+                    pass
+        return requrements
     except requests.RequestException as e:
         print(f"Error fetching constraints for {release_version}: {e}")
         return {}
@@ -63,9 +65,8 @@ def run(config: dict[str, Any] | None = None) -> int:
         all_constraints[release_version] = fetch_constraints(release_version, timeout)
 
     output_path = get_output_path(output_filename)
-    import json
     with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(all_constraints, f, indent=2, ensure_ascii=False)
+        yaml.dump(all_constraints, f)
 
     print(f"\nRequirements saved to: {output_path}")
     return 0

@@ -1,7 +1,7 @@
 """
 openstack.py - OpenStack releases 版本信息采集
 
-从 releases.openstack.org 抓取各版本组件版本和 upper-constraints。
+从 releases.openstack.org 抓取各版本组件版本。
 """
 
 import re
