@@ -57,8 +57,8 @@ def run(config: dict[str, Any] | None = None) -> int:
     output_filename = config['openstack']['output_requirements']
     timeout = config['fetcher']['timeout'] // 1000
 
-    all_constraints = {}
     for release in releases:
+        all_constraints = {}
         release_name = release.split()[-1]
         release_version = release.split()[0]
         print(f"Fetching constraints for {release_version}...")
