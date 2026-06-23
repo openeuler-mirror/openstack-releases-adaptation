@@ -7,7 +7,7 @@ requirements.py - OpenStack upper-requirements 采集
 from typing import Any
 
 import requests
-import yaml
+import json
 
 from config import load_config, get_data_path
 
@@ -30,16 +30,19 @@ def fetch_constraints(release_version: str, timeout: int = 30) -> dict[str, str]
         for upper_project in upper_projects:
             if not upper_project or "===" not in upper_project:
                 continue
-            
             project_name, project_version = upper_project.split('===')
             project_version = project_version.split(';')[0]
             if project_name not in requrements:
-                requrements[project_name.strip()] = project_version.strip()
+                pkg = {}
+                pkg['version'] = project_version.strip()
+                requrements[project_name.strip()] = pkg
             else:
                 try:
                     from packaging import version
                     if version.parse(requrements[project_name.strip()]) < version.parse(project_version.strip()):
-                        requrements[project_name.strip()] = project_version.strip()
+                        pkg = {}
+                        pkg['version'] = project_version.strip()
+                        requrements[project_name.strip()] = pkg
                 except Exception:
                     pass
         return requrements
@@ -58,15 +61,13 @@ def run(config: dict[str, Any] | None = None) -> int:
     timeout = config['fetcher']['timeout'] // 1000
 
     for release in releases:
-        all_constraints = {}
-        release_name = release.split()[-1]
         release_version = release.split()[0]
         print(f"Fetching constraints for {release_version}...")
-        all_constraints[release_version] = fetch_constraints(release_version, timeout)
+        result = fetch_constraints(release_version, timeout)
 
-        output_path = get_data_path(release.split()[0],output_filename)
+        output_path = get_data_path(release_version,output_filename)
         with open(output_path, 'w', encoding='utf-8') as f:
-            yaml.dump(all_constraints, f)
+            json.dump(result, f,indent=4)
 
         print(f"\nRequirements saved to: {output_path}")
     return 0
