@@ -95,10 +95,11 @@ def get_output_path(filename: str) -> Path:
     return ETC_DIR / filename
 
 
-def get_data_path(filename: str) -> Path:
+def get_data_path(release: str,filename: str) -> Path:
     """获取 data 目录下数据文件路径。"""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    return DATA_DIR / filename
+    release_dir=DATA_DIR.joinpath(release)
+    release_dir.mkdir(parents=True, exist_ok=True)
+    return release_dir / filename
 
 
 def get_state_path(filename: str) -> Path:

@@ -10,7 +10,7 @@ from typing import Any
 import requests
 import yaml
 
-from config import load_config, get_output_path
+from config import load_config, get_data_path
 
 
 def fetch_release_packages(release: str, base_url: str, timeout: int,
@@ -78,9 +78,9 @@ def run(config: dict[str, Any] | None = None, config_path: str | None = None) ->
         results = fetch_release_packages(release, base_url, timeout, verify_ssl)
         all_results[release.split()[0]] = results
 
-    output_path = get_output_path(output_filename)
-    with open(output_path, 'w', encoding='utf-8') as fp:
-        yaml.dump(all_results, fp)
+        output_path = get_data_path(release.split()[0],output_filename)
+        with open(output_path, 'w', encoding='utf-8') as fp:
+            yaml.dump(all_results, fp)
 
-    print(f"\nResults saved to: {output_path}")
+        print(f"\nResults saved to: {output_path}")
     return 0

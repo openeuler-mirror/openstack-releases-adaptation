@@ -9,7 +9,7 @@ from typing import Any
 import requests
 import yaml
 
-from config import load_config, get_output_path
+from config import load_config, get_data_path
 
 
 def fetch_constraints(release_version: str, timeout: int = 30) -> dict[str, str]:
@@ -64,9 +64,9 @@ def run(config: dict[str, Any] | None = None) -> int:
         print(f"Fetching constraints for {release_version}...")
         all_constraints[release_version] = fetch_constraints(release_version, timeout)
 
-    output_path = get_output_path(output_filename)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        yaml.dump(all_constraints, f)
+        output_path = get_data_path(release.split()[0],output_filename)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            yaml.dump(all_constraints, f)
 
-    print(f"\nRequirements saved to: {output_path}")
+        print(f"\nRequirements saved to: {output_path}")
     return 0
