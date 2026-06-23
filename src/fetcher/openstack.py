@@ -72,12 +72,12 @@ def run(config: dict[str, Any] | None = None, config_path: str | None = None) ->
     verify_ssl = config['fetcher']['verify_ssl']
     output_filename = config['openstack']['output_release']
 
-    all_results = {}
     for release in releases:
+        all_results = {}
         print(f"Fetching {release}...")
         results = fetch_release_packages(release, base_url, timeout, verify_ssl)
         all_results[release.split()[0]] = results
-
+        print(release.split()[0])
         output_path = get_data_path(release.split()[0],output_filename)
         with open(output_path, 'w', encoding='utf-8') as fp:
             yaml.dump(all_results, fp)
